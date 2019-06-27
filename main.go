@@ -19,9 +19,11 @@ func getCsvReader(r io.Reader) *csv.Reader {
 	return csv.NewReader(r)
 }
 
-func getRecords(r *csv.Reader) <-chan Record {
+func getRecords(done <-chan bool, r *csv.Reader) <-chan Record {
 	out := make(chan Record)
 	go func() {
+		defer close(out)
+
 		for {
 			record, err := r.Read()
 			if err == io.EOF {
@@ -31,35 +33,51 @@ func getRecords(r *csv.Reader) <-chan Record {
 				log.Fatal(err)
 			}
 
-			out <- record
+			select {
+			case <-done:
+				return
+			case out <- record:
+
+			}
+
 		}
-		close(out)
 	}()
 	return out
 }
 
-func getFilteredRecords(in <-chan Record, filter Filter) <-chan Record {
+func getFilteredRecords(done <-chan bool, in <-chan Record, filter Filter) <-chan Record {
 	out := make(chan Record)
 	go func() {
+		defer close(out)
+
 		for r := range in {
-			if filter(r) {
-				out <- r
+			select {
+			case <-done:
+				return
+			default:
+				if filter(r) {
+					out <- r
+				}
 			}
 		}
-		close(out)
 	}()
 	return out
 }
 
-func mergeFilteredRecords(channels []<-chan Record) <-chan Record {
+func mergeFilteredRecords(done <-chan bool, channels []<-chan Record) <-chan Record {
 	var wg sync.WaitGroup
 	out := make(chan Record)
 
 	output := func(c <-chan Record) {
+		defer wg.Done()
 		for n := range c {
-			out <- n
+			select {
+			case out <- n:
+
+			case <-done:
+				return
+			}
 		}
-		wg.Done()
 	}
 	wg.Add(len(channels))
 	for _, c := range channels {
@@ -73,8 +91,13 @@ func mergeFilteredRecords(channels []<-chan Record) <-chan Record {
 	return out
 }
 
-func writeRecordsStream(in <-chan Record, w *csv.Writer) {
+func writeRecordsStream(done <-chan bool, in <-chan Record, w *csv.Writer) {
 	for record := range in {
+		select {
+		case <-done:
+			log.Println("stopped printing")
+		default:
+		}
 		if err := w.Write(record); err != nil {
 			log.Fatalln("error writing record to csv:", err)
 		}
@@ -118,11 +141,14 @@ func main() {
 	w := csv.NewWriter(os.Stdout)
 	f := buildFilter(params)
 
+	done := make(chan bool)
+	defer close(done)
+
 	var filteredRecordChannels []<-chan Record
-	recordsChannel := getRecords(r)
+	recordsChannel := getRecords(done, r)
 	for i := 0; i < workerCount; i++ {
-		filteredRecordChannels = append(filteredRecordChannels, getFilteredRecords(recordsChannel, f))
+		filteredRecordChannels = append(filteredRecordChannels, getFilteredRecords(done, recordsChannel, f))
 	}
 
-	writeRecordsStream(mergeFilteredRecords(filteredRecordChannels), w)
+	writeRecordsStream(done, mergeFilteredRecords(done, filteredRecordChannels), w)
 }
