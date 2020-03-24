@@ -21,11 +21,20 @@ Usage of ./csvGrep:
 ```
 
 ## Example
-Find bad strings (????? instead of names) in the customers file:
+* Find bad strings (????? instead of names) in the customers file:
 ```shell script
 ./csvGrep -e="[?]{4,}" -f="./customers.csv"
 ```
+* Search in specific column
+```shell script
+head -n1 customers.csv 
+id,firstName,lastName,userId,email,phone,countryId,status,registrationDate,campaignId,balance,isLead
 
+head -n1 customers.csv | ./csvGrep -e="Name" -c=2
+id,firstName,lastName,userId,email,phone,countryId,status,registrationDate,campaignId,balance,isLead
+
+head -n1 customers.csv | ./csvGrep -e="Name" -c=0
+```
 
 ## Built With
 
