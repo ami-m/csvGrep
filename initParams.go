@@ -55,7 +55,12 @@ func initParams() runParams {
 		}
 	}
 	res.cols = actualCols
-	res.colNames = colNames
+
+	var actualColNames []string
+	for _, v := range colNames {
+		actualColNames = append(actualColNames, v)
+	}
+	res.colNames = actualColNames
 
 	separatorRunes := []rune(separator)
 	res.separator = separatorRunes[0]
