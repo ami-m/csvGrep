@@ -9,6 +9,8 @@ Build the executable with `go build`.
 `./csvGrep --help` will give you this:
 ```shell script
 Usage of ./csvGrep:
+  -C value
+        list of columns to operate on by name
   -c value
         list of columns to operate on
   -e string
@@ -33,7 +35,12 @@ id,firstName,lastName,userId,email,phone,countryId,status,registrationDate,campa
 head -n1 customers.csv | ./csvGrep -e="Name" -c=2
 id,firstName,lastName,userId,email,phone,countryId,status,registrationDate,campaignId,balance,isLead
 
-head -n1 customers.csv | ./csvGrep -e="Name" -c=0
+head -n1 customers.csv | csvGrep -e="Name" -c=0
+```
+
+* Find gmail customers in the first 10 rows:
+```shell script
+ head -n10 customers.csv | csvGrep -C="email" -e="gmail"
 ```
 
 ## Built With

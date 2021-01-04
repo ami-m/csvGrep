@@ -12,6 +12,7 @@ type runParams struct {
 	separator rune
 	invert    bool
 	cols      []int
+	colNames  []string
 }
 
 type arrayFlags []string
@@ -32,12 +33,14 @@ func initParams() runParams {
 	var separator string
 	var invert bool
 	var cols arrayFlags
+	var colNames arrayFlags
 
 	flag.StringVar(&pattern, "e", "", "regex pattern to match")
 	flag.StringVar(&file, "f", "", "path to input file instead of stdin")
 	flag.StringVar(&separator, "s", ",", "separator character (defaults to a comma)")
 	flag.BoolVar(&invert, "v", false, "invert (like -v in grep) return only the rows that *don't* fulfill the pattern")
-	flag.Var(&cols, "c", "list of columns to operate on")
+	flag.Var(&cols, "c", "list of columns to operate on index (zero based)")
+	flag.Var(&colNames, "C", "list of columns to operate on by name")
 
 	flag.Parse()
 
@@ -52,6 +55,7 @@ func initParams() runParams {
 		}
 	}
 	res.cols = actualCols
+	res.colNames = colNames
 
 	separatorRunes := []rune(separator)
 	res.separator = separatorRunes[0]

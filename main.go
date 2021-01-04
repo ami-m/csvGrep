@@ -19,11 +19,12 @@ func getCsvReader(r io.Reader) *csv.Reader {
 	return csv.NewReader(r)
 }
 
-func getRecords(done <-chan bool, r *csv.Reader) <-chan Record {
+func getRecords(done <-chan bool, r *csv.Reader, p *runParams, paramsReady chan bool) <-chan Record {
 	out := make(chan Record)
 	go func() {
 		defer close(out)
 
+		isHeaderRow := true
 		for {
 			record, err := r.Read()
 			if err == io.EOF {
@@ -31,6 +32,11 @@ func getRecords(done <-chan bool, r *csv.Reader) <-chan Record {
 			}
 			if err != nil {
 				log.Fatal(err)
+			}
+			if isHeaderRow {
+				setHeaderMap(p, record)
+				isHeaderRow = false
+				paramsReady <- true
 			}
 
 			select {
@@ -43,6 +49,26 @@ func getRecords(done <-chan bool, r *csv.Reader) <-chan Record {
 		}
 	}()
 	return out
+}
+
+func setHeaderMap(p *runParams, record []string) {
+	// if no col names were given, then stop
+	if 0 == len(p.colNames) {
+		return
+	}
+
+	// scan the header row, and make each col header to its index
+	colMap := make(map[string]int)
+	for i, key := range record {
+		colMap[key] = i
+	}
+
+	// build the new p.cols array
+	res := make([]int, len(p.colNames))
+	for i, key := range p.colNames {
+		res[i] = colMap[key]
+	}
+	p.cols = res
 }
 
 func getFilteredRecords(done <-chan bool, in <-chan Record, filter Filter) <-chan Record {
@@ -139,13 +165,18 @@ func main() {
 	params := initParams()
 	r := getCsvReader(getRawReader(params))
 	w := csv.NewWriter(os.Stdout)
-	f := buildFilter(params)
 
 	done := make(chan bool)
 	defer close(done)
 
 	var filteredRecordChannels []<-chan Record
-	recordsChannel := getRecords(done, r)
+
+	// ugly hack: the getRecords function might change the run params after reading the header row, but since the read happens in a go routine I need to sync the filter building with the params preparation
+	paramsReady := make(chan bool)
+	recordsChannel := getRecords(done, r, &params, paramsReady)
+	<-paramsReady
+
+	f := buildFilter(params)
 	for i := 0; i < workerCount; i++ {
 		filteredRecordChannels = append(filteredRecordChannels, getFilteredRecords(done, recordsChannel, f))
 	}
